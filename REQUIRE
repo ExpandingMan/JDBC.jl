@@ -1,4 +1,6 @@
-julia 0.6
+julia 1.0
 JavaCall 0.5.0
 DataStreams
+DBAPI
 Compat 0.60.0
+Reexport

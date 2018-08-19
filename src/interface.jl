@@ -1,19 +1,17 @@
 
-mutable struct Connection
+mutable struct Connection <: DBAPI.AbstractConnection
     conn::Union{JConnection,Nothing}
 
     Connection(conn::JConnection) = new(conn)
 end
 
 
-struct JDBCError <: Exception
+struct JDBCError <: DBAPI.AbstractDBError
     msg::AbstractString
 end
 
-Base.showerror(io::IO, e::JDBCError) = print(io, JDBCError, ": " * e.msg)
 
-
-mutable struct Cursor
+mutable struct Cursor <: DBAPI.AbstractCursor
     conn::Connection
     stmt::Union{JStatement, Nothing}
     rs::Union{JResultSet, Nothing}
@@ -68,31 +66,16 @@ function Base.close(conn::Connection)
 end
 
 """
-Close the JDBCCursor `csr`.  Throws a `JDBCError` if cursor is not initialized.
-
-Returns `nothing`.
-"""
-function Base.close(csr::Cursor)
-    csr.stmt == nothing && throw(JDBCError("Cannot close uninitialized cursor."))
-    if csr.rs == nothing
-        close(csr.rs)
-        csr.rs = nothing
-    end
-    close(csr.stmt)
-    csr.stmt = nothing
-end
-
-"""
 Returns a boolean indicating whether connection `conn` is open.
 """
-isopen(conn::Connection) = (conn.conn ≠ nothing)
+Base.isopen(conn::Connection) = (conn.conn ≠ nothing)
 
 """
 Commit any pending transaction to the database.  Throws a `JDBCError` if connection is null.
 
 Returns `nothing`.
 """
-function commit(conn::Connection)
+function DBAPI.commit(conn::Connection)
     isopen(conn) || throw(JDBCError("Commit called on null connection."))
     commit(conn.conn)
     nothing
@@ -103,7 +86,7 @@ Roll back to the start of any pending transaction.  Throws a `JDBCError` if conn
 
 Returns `nothing`.
 """
-function rollback(conn::Connection)
+function DBAPI.rollback!(conn::Connection)
     isopen(conn) || throw(JDBCError("Rollback called on null connection."))
     rollback(conn.conn)
     nothing
@@ -114,15 +97,16 @@ Create a new database cursor.
 
 Returns a `JDBCCursor` instance.
 """
-cursor(conn::Connection) = Cursor(conn)
-function cursor(host::AbstractString; props=Dict(), connectorpath="")
+DBAPI.cursor(conn::Connection) = Cursor(conn)
+
+function Cursor(host::AbstractString; props=Dict(), connectorpath="")
     cursor(Connection(host, props=props, connectorpath=connectorpath))
 end
 
 """
 Return the corresponding connection for a given cursor.
 """
-connection(csr::Cursor) = csr.conn
+DBAPI.connection(csr::Cursor) = csr.conn
 
 """
 Run a query on a database.
@@ -131,14 +115,14 @@ The results of the query are not returned by this function but are accessible
 through the cursor.
 
 `parameters` can be any iterable of positional parameters, or of some
-T<:Associative for keyword/named parameters.
+T<:AbstractDict for keyword/named parameters.
 
 Throws a `JDBCError` if query caused an error, cursor is not initialized or
  connection is null.
 
 Returns `nothing`.
 """
-function execute!(csr::Cursor, qry::AbstractString)
+function DBAPI.execute!(csr::Cursor, qry::AbstractString)
     isopen(connection(csr)) || throw(JDBCError("Cannot execute with null connection."))
     csr.stmt == nothing && throw(JDBCError("Execute called on uninitialized cursor."))
     exectype = execute(csr.stmt, qry)
@@ -171,8 +155,7 @@ function rows(csr::Cursor)
         throw(JDBCError(string("Cannot create iterator with null result set.  ",
                                "Please call execute! on the cursor first.")))
     end
-    return JDBCRowIterator(csr.rs)
+    JDBCRowIterator(csr.rs)
 end
 
-export connect, isopen, commit, rollback, cursor,
-       connection, execute!, rows
+export rows

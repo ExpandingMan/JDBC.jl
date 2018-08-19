@@ -6,7 +6,9 @@ using DataStreams
 using Compat, Compat.Dates, Compat.Test
 using Compat: @info
 
-JDBC.usedriver(joinpath(Pkg.dir("JDBC"), "test", "derby.jar"))
+const DERBY_FILE = joinpath(dirname(pathof(JDBC)),"..","test","derby.jar")
+
+JDBC.usedriver(DERBY_FILE)
 JDBC.init()
 
 conn = DriverManager.getConnection("jdbc:derby:jar:(toursdb.jar)toursdb")
@@ -123,7 +125,7 @@ close(cstmt)
 
 # test DBAPI functions
 dbconn = JDBC.Connection("jdbc:derby:jar:(toursdb.jar)toursdb",
-                         connectorpath=joinpath(Pkg.dir("JDBC"), "test", "derby.jar"))
+                         connectorpath=DERBY_FILE)
 csr = cursor(dbconn)
 execute!(csr, "select * from airlines")
 airlines = collect(rows(csr))
@@ -137,10 +139,8 @@ airlines = collect(rows(csr))
     @test airlines[1][1] == "AA"
 end
 
-close(csr)
-
-@testset "JuliaInterface" begin
-    airlines = JDBC.load(DataFrame, cursor(dbconn), "select * from airlines")
+@testset "DBAPI" begin
+    airlines = load(DataFrame, cursor(dbconn), "select * from airlines")
     @test size(airlines) == (2,9)
     @test airlines[1, 3] == 0.18
     @test airlines[2, 3] == 0.19

@@ -1,15 +1,16 @@
 #This file is part of JDBC.jl. License is MIT.
 module JDBC
 using JavaCall
-using Compat
+using Compat, Reexport
 using Compat.Dates
-using Compat: Nullable
+
+@reexport using DBAPI
 
 if VERSION ≤ v"0.7.0-"
     using Missings
 end
 
-import Compat: IteratorSize, IteratorEltype, start, next, done
+import Compat: IteratorSize, IteratorEltype
 
 export DriverManager, createStatement, prepareStatement, prepareCall, executeQuery, setFetchSize,
         getInt, getFloat, getString, getShort, getByte, getTime, getTimestamp, getDate,
@@ -278,9 +279,8 @@ getResultSet(stmt::JStatement) = jcall(stmt, "getResultSet", JResultSet, ())
 
 isdone(rs::JResultSet) = jcall(rs, "next", jboolean, ()) == 0
 
-start(rs::JResultSet) = true
-next(rs::JResultSet, state) = rs, state
-done(rs::JResultSet, state) = isdone(rs)
+Base.iterate(rs::JResultSet) = (rs, 1)
+Base.iterate(rs::JResultSet, state) = isdone(rs) ? nothing : (rs, state+1)
 
 
 for s in [("String", :JString),
@@ -620,8 +620,8 @@ mutable struct JDBCRowIterator
     end
 end
 
-start(iter::JDBCRowIterator) = true
-function next(iter::JDBCRowIterator, state)
+function Base.iterate(iter::JDBCRowIterator, state=1)
+    iterate(iter.rs, state) ≡ nothing && (return nothing)
     row = Array{Any}(undef, iter.ncols)
     for c in 1:iter.ncols
         val = iter.get_methods[c](iter.rs, c)
@@ -634,9 +634,8 @@ function next(iter::JDBCRowIterator, state)
         end
     end
 
-    tuple(row...), state
+    tuple(row...), state+1
 end
-done(iter::JDBCRowIterator, state) = done(iter.rs, state)
 
 IteratorSize(::JDBCRowIterator) = Base.SizeUnknown()
 IteratorEltype(::JDBCRowIterator) = Base.EltypeUnknown()

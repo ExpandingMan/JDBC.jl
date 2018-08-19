@@ -29,7 +29,7 @@ const column_types = Dict(
 usedriver(str::AbstractString) = JavaCall.addClassPath(str)
 
 
-struct Source
+struct Source <: DBAPI.AbstractDBSource
     rs::JResultSet
     md::JResultSetMetaData
 end
@@ -43,6 +43,8 @@ function Source(csr::Cursor)
         Source(csr.rs)
     end
 end
+
+DBAPI.source(csr::Cursor) = Source(csr)
 
 # these methods directly access the underlying JResultSet and are used in Schema constructor
 function coltype(s::Source, col::Int)
@@ -87,12 +89,9 @@ function Data.streamfrom(s::Source, ::Type{Data.Field}, ::Type{Union{T, Missing}
     convert(T, o)::T
 end
 
-load(::Type{T}, s::Source) where {T} = Data.close!(Data.stream!(s, T))
-load(::Type{T}, rs::JResultSet) where {T} = load(T, Source(rs))
-load(::Type{T}, stmt::JStatement, query::AbstractString) where {T} = load(T, Source(stmt, query))
-load(::Type{T}, csr::Union{JDBC.Cursor,JDBCRowIterator}) where {T} = load(T, Source(csr))
-function load(::Type{T}, csr::Cursor, q::AbstractString) where T
-    execute!(csr, q)
-    load(T, csr)
+DBAPI.load(::Type{T}, rs::JResultSet) where {T} = load(T, Source(rs))
+function DBAPI.load(::Type{T}, stmt::JStatement, query::AbstractString) where {T}
+    load(T, Source(stmt, query))
 end
+DBAPI.load(::Type{T}, itr::JDBCRowIterator) where {T} = load(T, Source(itr))
 
